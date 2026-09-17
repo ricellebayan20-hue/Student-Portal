@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduPortal System - Remarks Edition</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 font-sans min-h-screen flex flex-col justify-between antialiased">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 text-white p-4 flex flex-col sm:flex-row justify-between items-center px-4 sm:px-8 shadow-md gap-3">
+        <div class="flex items-center space-x-2">
+            <span class="bg-blue-600 text-white p-2 rounded-lg font-bold text-sm">EP</span>
+            <h1 class="font-bold text-lg tracking-wide">EduPortal Operational System</h1>
+        </div>
+        <div id="nav-user-section" class="w-full sm:w-auto flex justify-center">
+            <!-- Dynamic login/logout info injected via JS -->
+        </div>
+    </header>
+
+    <!-- Main Dynamic Content Area -->
+    <main id="app-container" class="flex-grow p-4 sm:p-6 max-w-7xl mx-auto w-full flex items-center justify-center">
+        <!-- Views injected via JS -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white text-center py-4 text-xs sm:text-sm text-slate-500 border-t border-slate-200">
+        &copy; 2026 Academic Portal System. All rights reserved. Remarks Classification Edition.
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Official customized subjects available for auto-tagging
+        const STANDARD_SUBJECTS = [
+            "Values Education",
+            "TLE",
+            "Science",
+            "Music and Arts",
+            "PE and Health",
+            "Araling Panlipunan",
+            "Mathematics",
+            "English",
+            "Filipino"
+        ];
+
+        // Database Initialization with localStorage Persistence (v6 for unified single entry sync)
+        const DB_KEY = 'eduportal_users_db_v6';
+        
+        const defaultUsers = [
+            { 
+                username: "adviser1", 
+                password: "123", 
+                role: "adviser", 
+                name: "RICELLE B. BAYAN" 
+            },
+            { 
+                username: "learner1", 
+                password: "123", 
+                role: "learner", 
+                name: "ANGOB, DEREK, BUGAIS",
+                lrn: "131574160031",
+                age: "15",
+                sex: "M",
+                grades: [
+                    { subject: "Science", grade: "82", remark: "Passed", isEditing: false },
+                    { subject: "Values Education", grade: "89", remark: "Passed", isEditing: false },
+                    { subject: "TLE", grade: "91", remark: "Passed", isEditing: false }
+                ]
+            },
+            { 
+                username: "learner2", 
+                password: "123", 
+                role: "learner", 
+                name: "BATAC, AJ JETRO, ROSALES",
+                lrn: "132083150052",
+                age: "15",
+                sex: "M",
+                grades: [
+                    { subject: "Science", grade: "89", remark: "Passed", isEditing: false },
+                    { subject: "Values Education", grade: "89", remark: "Passed", isEditing: false },
+                    { subject: "TLE", grade: "88", remark: "Passed", isEditing: false }
+                ]
+            }
+        ];
+
+        function getUsersDB() {
+            const data = localStorage.getItem(DB_KEY);
+            if (!data) {
+                localStorage.setItem(DB_KEY, JSON.stringify(defaultUsers));
+                return defaultUsers;
+            }
+            return JSON.parse(data);
+        }
+
+        function saveUsersDB(db) {
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+        }
+
+        // Automatic Remark Calculator based on your specifications
+        function calculateRemark(gradeVal, currentRemark = "In Progress") {
+            let num = parseFloat(gradeVal);
+            if (isNaN(gradeVal) || gradeVal === "") {
+                return currentRemark === "Failed" ? "Failed" : "In Progress";
+            }
+            if (num >= 75 && num <= 99) {
+                return "Passed";
+            } else if (num >= 0 && num < 75) {
+                return currentRemark === "Failed" ? "Failed" : "In Progress";
+            }
+            return "In Progress";
+        }
+
+        // Session Persistence Handling
+        let currentUser = JSON.parse(localStorage.getItem('eduportal_current_user')) || null;
+        let adviserViewMode = localStorage.getItem('eduportal_adviser_view') || 'matrix';
+
+        function setCurrentUser(user) {
+            currentUser = user;
+            if (user) {
+                localStorage.setItem('eduportal_current_user', JSON.stringify(user));
+            } else {
+                localStorage.removeItem('eduportal_current_user');
+            }
+        }
+
+        function toggleAdviserMode(mode) {
+            adviserViewMode = mode;
+            localStorage.setItem('eduportal_adviser_view', mode);
+            renderAppPreservingScroll();
+        }
+
+        function renderAppPreservingScroll() {
+            const scrollX = window.scrollX;
+            const scrollY = window.scrollY;
+            renderApp();
+            window.scrollTo(scrollX, scrollY);
+        }
+
+        // Handle Login Submission
+        function handleLogin(event) {
+            event.preventDefault();
+            const usernameInput = document.getElementById('username').value.trim().toLowerCase();
+            const passwordInput = document.getElementById('password').value.trim();
+            const errorMsg = document.getElementById('error-msg');
+
+            const usersDatabase = getUsersDB();
+            const foundUser = usersDatabase.find(
+                u => u.username.toLowerCase() === usernameInput && u.password === passwordInput
+            );
+
+            if (foundUser) {
+                setCurrentUser(foundUser);
+                renderAppPreservingScroll();
+            } else {
+                errorMsg.classList.remove('hidden');
+                errorMsg.textContent = "Invalid username or password. Check credentials and try again.";
+            }
+        }
+
+        function handleLogout() {
+            setCurrentUser(null);
+            renderAppPreservingScroll();
+        }
+
+        // Adviser Action: Enroll New Learner with Unique Pre-populated Standard Subjects
+        function handleEnrollLearner(event) {
+            event.preventDefault();
+            const name = document.getElementById('new-name').value.trim().toUpperCase();
+            const username = document.getElementById('new-username').value.trim().toLowerCase();
+            const password = document.getElementById('new-password').value.trim();
+            const lrn = document.getElementById('new-lrn') ? document.getElementById('new-lrn').value.trim() : "";
+            const age = document.getElementById('new-age') ? document.getElementById('new-age').value.trim() : "15";
+            const sex = document.getElementById('new-sex') ? document.getElementById('new-sex').value : "M";
+
+            let usersDatabase = getUsersDB();
+
+            if (usersDatabase.some(u => u.username.toLowerCase() === username)) {
+                alert("Error: Username already exists. Please pick a unique username.");
+                return;
+            }
+
+            const checkboxes = document.querySelectorAll('input[name="enroll-subject"]:checked');
+            let selectedGrades = [];
+            
+            checkboxes.forEach(cb => {
+                selectedGrades.push({
+                    subject: cb.value,
+                    grade: "",
+                    remark: "In Progress",
+                    isEditing: false
+                });
+            });
+
+            const newLearner = {
+                username: username,
+                password: password,
+                role: "learner",
+                name: name,
+                lrn: lrn,
+                age: age,
+                sex: sex,
+                grades: selectedGrades
+            };
+
+            usersDatabase.push(newLearner);
+            saveUsersDB(usersDatabase);
+            
+            if (currentUser && currentUser.role === 'adviser') {
+                currentUser = usersDatabase.find(u => u.username === currentUser.username);
+            }
+
+            alert(`Success: Learner ${name} has been enrolled.`);
+            renderAppPreservingScroll();
+        }
+
+        // Adviser Action: Add or Update custom subject uniquely (prevents duplication)
+        function handleAddCustomSubject(event, learnerUsername) {
+            event.preventDefault();
+            let usersDatabase = getUsersDB();
+            const learner = usersDatabase.find(u => u.username === learnerUsername);
+            
+            if (!learner) return;
+
+            const subjectInput = document.getElementById(`custom-sub-${learnerUsername}`).value.trim();
+            const grade = document.getElementById(`custom-grade-${learnerUsername}`).value.trim();
+            const remarkInput = document.getElementById(`custom-remark-${learnerUsername}`).value;
+            const remark = calculateRemark(grade, remarkInput);
+
+            if (!learner.grades) learner.grades = [];
+
+            // Check if subject already exists (case-insensitive to prevent spelling duplicates)
+            let existingSubjectIndex = learner.grades.findIndex(g => g.subject.toLowerCase() === subjectInput.toLowerCase());
+
+            if (existingSubjectIndex >= 0) {
+                // Update existing instead of creating duplicate entry
+                learner.grades[existingSubjectIndex].subject = subjectInput; // keep precise casing
+                learner.grades[existingSubjectIndex].grade = grade;
+                learner.grades[existingSubjectIndex].remark = remark;
+            } else {
+                // Push new unique subject
+                learner.grades.push({ subject: subjectInput, grade, remark, isEditing: false });
+            }
+
+            saveUsersDB(usersDatabase);
+            renderAppPreservingScroll();
+        }
+
+        function toggleEditSubject(learnerUsername, index) {
+            let usersDatabase = getUsersDB();
+            const learner = usersDatabase.find(u => u.username === learnerUsername);
+            if (learner && learner.grades[index]) {
+                learner.grades[index].isEditing = !learner.grades[index].isEditing;
+                saveUsersDB(usersDatabase);
+                renderAppPreservingScroll();
+            }
+        }
+
+        function handleSaveSubject(event, learnerUsername, index) {
+            event.preventDefault();
+            let usersDatabase = getUsersDB();
+            const learner = usersDatabase.find(u => u.username === learnerUsername);
+            if (learner && learner.grades[index]) {
+                const updatedSubject = document.getElementById(`edit-sub-${learnerUsername}-${index}`).value.trim();
+                const updatedGrade = document.getElementById(`edit-grade-${learnerUsername}-${index}`).value.trim();
+                const updatedRemarkChoice = document.getElementById(`edit-remark-${learnerUsername}-${index}`).value;
+                
+                const finalRemark = calculateRemark(updatedGrade, updatedRemarkChoice);
+
+                learner.grades[index].subject = updatedSubject;
+                learner.grades[index].grade = updatedGrade;
+                learner.grades[index].remark = finalRemark;
+                learner.grades[index].isEditing = false;
+                
+                saveUsersDB(usersDatabase);
+                renderAppPreservingScroll();
+            }
+        }
+
+        // Matrix Grid Live Update (Ensures strict single unique record per subject synced instantly)
+        function updateMatrixGradeCell(learnerUsername, subjectName, gradeValue) {
+            let usersDatabase = getUsersDB();
+            const learner = usersDatabase.find(u => u.username === learnerUsername);
+            if (learner) {
+                if (!learner.grades) learner.grades = [];
+                let existingGrade = learner.grades.find(g => g.subject.toLowerCase() === subjectName.toLowerCase());
+                let computedRemark = calculateRemark(gradeValue);
+                
+                if (existingGrade) {
+                    existingGrade.grade = gradeValue;
+                    existingGrade.remark = computedRemark;
+                } else {
+                    learner.grades.push({
+                        subject: subjectName,
+                        grade: gradeValue,
+                        remark: computedRemark,
+                        isEditing: false
+                    });
+                }
+                saveUsersDB(usersDatabase);
+            }
+        }
+
+        function handleDeleteSubject(learnerUsername, index) {
+            if (!confirm("Are you sure you want to remove this subject record?")) return;
+            let usersDatabase = getUsersDB();
+            const learner = usersDatabase.find(u => u.username === learnerUsername);
+            if (learner && learner.grades[index]) {
+                learner.grades.splice(index, 1);
+                saveUsersDB(usersDatabase);
+                renderAppPreservingScroll();
+            }
+        }
+
+        function handleFactoryReset() {
+            if (confirm("WARNING: This will clear all data and reset the database. Proceed?")) {
+                localStorage.removeItem(DB_KEY);
+                localStorage.removeItem('eduportal_current_user');
+                currentUser = null;
+                renderAppPreservingScroll();
+            }
+        }
+
+        // Main Router / Renderer
+        function renderApp() {
+            const container = document.getElementById('app-container');
+            const navSection = document.getElementById('nav-user-section');
+            const usersDatabase = getUsersDB();
+
+            if (currentUser) {
+                const latestUserCheck = usersDatabase.find(u => u.username === currentUser.username);
+                if (latestUserCheck) currentUser = latestUserCheck;
+            }
+
+            if (!currentUser) {
+                navSection.innerHTML = `<span class="text-xs sm:text-sm text-slate-400">Secure Portal Login</span>`;
+                container.innerHTML = `
+                    <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+                        <div class="text-center mb-6">
+                            <h2 class="text-2xl font-extrabold text-slate-800">System Sign In</h2>
+                            <p class="text-xs text-slate-500 mt-1">Please enter your assigned account credentials</p>
+                        </div>
+                        <form onsubmit="handleLogin(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Username</label>
+                                <input type="text" id="username" required class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="Enter username">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Password</label>
+                                <input type="password" id="password" required class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600" placeholder="••••••••">
+                            </div>
+                            <p id="error-msg" class="text-red-500 text-xs hidden bg-red-50 p-2.5 rounded-lg border border-red-100"></p>
+                            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition shadow-sm text-sm">Sign In to Dashboard</button>
+                        </form>
+                    </div>
+                `;
+            } else {
+                navSection.innerHTML = `
+                    <div class="flex flex-wrap items-center justify-center sm:justify-end gap-3 text-center">
+                        <span class="text-xs sm:text-sm bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
+                            Logged in as: <strong class="text-blue-400">${currentUser.name}</strong> 
+                            <span class="text-slate-400 uppercase text-[10px] ml-1 bg-slate-900 px-1.5 py-0.5 rounded">${currentUser.role}</span>
+                        </span>
+                        <button onclick="handleLogout()" class="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm">Logout</button>
+                    </div>
+                `;
+
+                if (currentUser.role === 'learner') {
+                    let gradesHtml = "";
+                    if (!currentUser.grades || currentUser.grades.length === 0) {
+                        gradesHtml = `<tr><td colspan="3" class="px-6 py-8 text-center text-sm text-slate-400 italic">No academic records or grades have been posted by your adviser yet.</td></tr>`;
+                    } else {
+                        gradesHtml = currentUser.grades.map(g => {
+                            let remarkColor = "text-emerald-600 bg-emerald-50 border-emerald-200";
+                            if (g.remark === 'Failed') remarkColor = "text-red-600 bg-red-50 border-red-200";
+                            if (g.remark === 'In Progress') remarkColor = "text-amber-600 bg-amber-50 border-amber-200";
+
+                            return `
+                                <tr class="hover:bg-slate-50/50 transition">
+                                    <td class="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-800">${g.subject}</td>
+                                    <td class="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-mono">${g.grade || 'Pending'}</td>
+                                    <td class="px-4 sm:px-6 py-4 whitespace-nowrap text-xs">
+                                        <span class="px-2.5 py-1 rounded-full border font-semibold inline-block ${remarkColor}">${g.remark || 'In Progress'}</span>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+
+                    container.innerHTML = `
+                        <div class="w-full max-w-4xl bg-white p-4 sm:p-8 rounded-2xl shadow-xl border border-slate-200">
+                            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-100 gap-2 mb-6">
+                                <div>
+                                    <h2 class="text-xl sm:text-2xl font-extrabold text-slate-800">Learner Academic Record</h2>
+                                    <p class="text-xs sm:text-sm text-slate-500">Official student portal view (Single Unified Entry per Subject)</p>
+                                </div>
+                                <span class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-xl text-xs font-bold">
+                                    Student ID: ${currentUser.username}
+                                </span>
+                            </div>
+
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
+                                <table class="min-w-full divide-y divide-slate-200">
+                                    <thead class="bg-slate-50">
+                                        <tr>
+                                            <th class="px-4 sm:px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Subject Name</th>
+                                            <th class="px-4 sm:px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Grade / Mark</th>
+                                            <th class="px-4 sm:px-6 py-3.5 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Remarks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-slate-200">
+                                        ${gradesHtml}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                } else if (currentUser.role === 'adviser') {
+                    const learnersList = usersDatabase.filter(u => u.role === 'learner');
+
+                    let toggleBarHtml = `
+                        <div class="flex flex-wrap justify-between items-center bg-slate-900 text-white px-4 py-3 rounded-xl mb-4 gap-2">
+                            <div class="text-xs">
+                                <strong>Adviser Mode:</strong> Manage Section 10 - NEWTON
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="toggleAdviserMode('matrix')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adviserViewMode === 'matrix' ? 'bg-blue-600 text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">📊 Master Grid Entry</button>
+                                <button onclick="toggleAdviserMode('cards')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adviserViewMode === 'cards' ? 'bg-blue-600 text-white shadow' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">🗂️ Detailed Cards View</button>
+                            </div>
+                        </div>
+                    `;
+
+                    if (adviserViewMode === 'matrix') {
+                        let subjectHeadersHtml = STANDARD_SUBJECTS.map(sub => `
+                            <th class="px-2 py-2 text-[11px] font-bold text-slate-700 uppercase border border-slate-300 text-center bg-slate-100 min-w-[70px]">${sub}</th>
+                        `).join('');
+
+                        let matrixRowsHtml = learnersList.map((learner, index) => {
+                            let subjectInputsHtml = STANDARD_SUBJECTS.map(sub => {
+                                let foundGradeObj = learner.grades ? learner.grades.find(g => g.subject.toLowerCase() === sub.toLowerCase()) : null;
+                                let currentVal = foundGradeObj ? foundGradeObj.grade : '';
+                                return `
+                                    <td class="p-1 border border-slate-300 text-center">
+                                        <input type="text" 
+                                               value="${currentVal}" 
+                                               oninput="updateMatrixGradeCell('${learner.username}', '${sub}', this.value)"
+                                               class="w-16 px-1 py-1 text-center text-xs font-mono font-bold bg-slate-50 focus:bg-white border border-transparent focus:border-blue-500 rounded focus:outline-none"
+                                               placeholder="-">
+                                    </td>
+                                `;
+                            }).join('');
+
+                            return `
+                                <tr class="hover:bg-blue-50/40 transition">
+                                    <td class="px-3 py-2 text-xs font-semibold text-slate-800 border border-slate-300 whitespace-nowrap">${index + 1}. ${learner.name}</td>
+                                    <td class="px-2 py-2 text-xs font-mono text-slate-600 border border-slate-300 text-center whitespace-nowrap">${learner.lrn || 'N/A'}</td>
+                                    ${subjectInputsHtml}
+                                    <td class="px-2 py-2 text-center border border-slate-300">
+                                        <button onclick="if(confirm('Remove learner?')) { let db=getUsersDB(); db=db.filter(u=>u.username!='${learner.username}'); saveUsersDB(db); renderAppPreservingScroll(); }" class="text-red-500 hover:text-red-700 font-bold px-1.5 py-0.5 rounded text-xs" title="Remove Learner">✕</button>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+
+                        container.innerHTML = `
+                            <div class="w-full bg-white p-4 sm:p-6 rounded-2xl shadow-xl border border-slate-200">
+                                ${toggleBarHtml}
+                                <div class="flex justify-between items-center mb-4">
+                                    <h2 class="text-xl font-extrabold text-slate-800">Master Class Record Grid</h2>
+                                    <button onclick="handleFactoryReset()" class="text-xs bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-300 px-3 py-1.5 rounded-xl transition">Reset DB</button>
+                                </div>
+                                <p class="text-xs text-slate-500 mb-4">Type grades directly. Entries instantly sync with the Detailed Cards View and Learner portal with unique single entries.</p>
+
+                                <div class="overflow-x-auto border border-slate-300 rounded-xl shadow-sm mb-6">
+                                    <table class="min-w-full border-collapse bg-white">
+                                        <thead>
+                                            <tr class="bg-slate-200 text-slate-700 text-center">
+                                                <th class="px-3 py-2.5 text-xs font-bold uppercase border border-slate-300 text-left">Learners' Names</th>
+                                                <th class="px-2 py-2.5 text-xs font-bold uppercase border border-slate-300">LRN</th>
+                                                ${subjectHeadersHtml}
+                                                <th class="px-2 py-2.5 text-xs font-bold uppercase border border-slate-300">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${learnersList.length > 0 ? matrixRowsHtml : `<tr><td colspan="12" class="text-center py-6 text-slate-400 italic text-xs">No learners found.</td></tr>`}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- Add Learner Quick Bar -->
+                                <div class="bg-blue-50/80 border border-blue-200 p-4 rounded-xl">
+                                    <h3 class="font-bold text-blue-900 text-xs uppercase tracking-wider mb-2">+ Enroll New Learner</h3>
+                                    <form onsubmit="handleEnrollLearner(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                                        <input type="text" id="new-name" placeholder="Full Name (LAST, FIRST)" required class="px-3 py-1.5 text-xs border rounded-lg bg-white uppercase">
+                                        <input type="text" id="new-lrn" placeholder="LRN Number" required class="px-3 py-1.5 text-xs border rounded-lg bg-white">
+                                        <input type="text" id="new-username" placeholder="Username ID" required class="px-3 py-1.5 text-xs border rounded-lg bg-white">
+                                        <input type="text" id="new-password" placeholder="Password" required class="px-3 py-1.5 text-xs border rounded-lg bg-white">
+                                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1.5 px-3 rounded-lg text-xs transition">Enroll Student</button>
+                                    </form>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        let learnersTableHtml = learnersList.map(learner => {
+                            const subjectCount = learner.grades ? learner.grades.length : 0;
+                            const subjectsListHtml = learner.grades && learner.grades.map((g, index) => {
+                                if (g.isEditing) {
+                                    return `
+                                        <form onsubmit="handleSaveSubject(event, '${learner.username}', ${index})" class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center bg-slate-50 p-3 rounded-xl border border-amber-300 my-2">
+                                            <input type="text" id="edit-sub-${learner.username}-${index}" value="${g.subject}" required class="px-3 py-1.5 text-xs border rounded-lg sm:w-1/3">
+                                            <input type="text" id="edit-grade-${learner.username}-${index}" value="${g.grade}" required class="px-3 py-1.5 text-xs border rounded-lg sm:w-1/4">
+                                            <select id="edit-remark-${learner.username}-${index}" class="px-3 py-1.5 text-xs border rounded-lg">
+                                                <option value="In Progress" ${g.remark === 'In Progress' ? 'selected' : ''}>In Progress (0-74)</option>
+                                                <option value="Failed" ${g.remark === 'Failed' ? 'selected' : ''}>Failed (0-74)</option>
+                                                <option value="Passed" ${g.remark === 'Passed' ? 'selected' : ''}>Passed (75-99)</option>
+                                            </select>
+                                            <div class="flex gap-2 mt-1 sm:mt-0">
+                                                <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium">Save</button>
+                                                <button type="button" onclick="toggleEditSubject('${learner.username}', ${index})" class="flex-1 bg-slate-400 hover:bg-slate-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium">Cancel</button>
+                                            </div>
+                                        </form>
+                                    `;
+                                } else {
+                                    return `
+                                        <div class="flex justify-between items-center bg-white px-3.5 py-2 rounded-xl border border-slate-200 my-1.5 shadow-xs">
+                                            <div class="text-xs">
+                                                <strong class="text-slate-800 font-semibold">${g.subject}</strong>: 
+                                                <span class="font-mono text-slate-600">${g.grade || 'Pending'}</span> 
+                                                <span class="text-slate-400 ml-1">([Remark: ${g.remark || 'In Progress'}])</span>
+                                            </div>
+                                            <div class="flex items-center gap-1.5">
+                                                <button onclick="toggleEditSubject('${learner.username}', ${index})" class="text-[11px] bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 rounded-lg transition font-medium">Edit</button>
+                                                <button onclick="handleDeleteSubject('${learner.username}', ${index})" class="text-[11px] bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded-lg transition">✕</button>
+                                            </div>
+                                        </div>
+                                    `;
+                                }
+                            }).join('') || '';
+
+                            return `
+                                <div class="bg-white border border-slate-200 p-4 sm:p-5 rounded-2xl shadow-xs mb-4">
+                                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                                        <div>
+                                            <h4 class="font-bold text-slate-800 text-base">${learner.name}</h4>
+                                            <p class="text-xs text-slate-500">Username ID: <span class="font-mono text-blue-600 font-semibold">${learner.username}</span> | Password: <span class="font-mono text-slate-600">${learner.password}</span></p>
+                                        </div>
+                                        <span class="text-xs font-bold px-3 py-1 rounded-xl border bg-blue-50 text-blue-700 border-blue-200">
+                                            Subjects: ${subjectCount}
+                                        </span>
+                                    </div>
+                                    <div class="mt-3 text-sm text-slate-600 border-t border-slate-100 pt-3">
+                                        <strong class="block mb-2 text-[11px] text-slate-400 uppercase tracking-wider">Assigned Subjects (Single Entry Only):</strong>
+                                        ${subjectCount === 0 ? '<p class="text-xs text-amber-600 italic mb-3">No subjects assigned yet.</p>' : `<div class="mb-3 space-y-1">${subjectsListHtml}</div>`}
+                                        
+                                        <form onsubmit="handleAddCustomSubject(event, '${learner.username}')" class="flex flex-col sm:flex-row gap-2 items-stretch mt-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                            <input type="text" id="custom-sub-${learner.username}" placeholder="Subject Name" required class="px-3 py-1.5 text-xs border rounded-lg sm:w-1/3">
+                                            <input type="text" id="custom-grade-${learner.username}" placeholder="Grade" required class="px-3 py-1.5 text-xs border rounded-lg sm:w-1/4">
+                                            <select id="custom-remark-${learner.username}" class="px-3 py-1.5 text-xs border rounded-lg">
+                                                <option value="In Progress">In Progress (0-74)</option>
+                                                <option value="Failed">Failed (0-74)</option>
+                                                <option value="Passed">Passed (75-99)</option>
+                                            </select>
+                                            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-4 py-1.5 rounded-lg font-semibold transition">Save Subject</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+
+                        let subjectCheckboxesHtml = STANDARD_SUBJECTS.map(sub => `
+                            <label class="flex items-center space-x-2 text-xs text-slate-700 bg-white p-2 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+                                <input type="checkbox" name="enroll-subject" value="${sub}" checked class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4">
+                                <span class="font-medium">${sub}</span>
+                            </label>
+                        `).join('');
+
+                        container.innerHTML = `
+                            <div class="w-full bg-white p-4 sm:p-8 rounded-2xl shadow-xl border border-slate-200">
+                                ${toggleBarHtml}
+                                <div class="flex justify-between items-center pb-4 border-b border-slate-100 mb-6">
+                                    <div>
+                                        <h2 class="text-xl font-extrabold text-slate-800">Detailed Cards View</h2>
+                                        <p class="text-xs text-slate-500">Manage individual student profiles and remarks without duplicate subject entries</p>
+                                    </div>
+                                    <button onclick="handleFactoryReset()" class="text-xs bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 border border-slate-300 px-3 py-1.5 rounded-xl transition">Reset DB</button>
+                                </div>
+
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                                    <div class="bg-blue-50/60 border border-blue-200/80 p-5 rounded-2xl shadow-xs sticky top-4">
+                                        <h3 class="font-bold text-blue-900 mb-3 text-base">Enroll New Learner</h3>
+                                        <form onsubmit="handleEnrollLearner(event)" class="space-y-3.5">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Full Legal Name</label>
+                                                <input type="text" id="new-name" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white uppercase" placeholder="e.g. DOE, JANE">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Username ID</label>
+                                                <input type="text" id="new-username" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white" placeholder="e.g. jane2026">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                                                <input type="text" id="new-password" required class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl bg-white" placeholder="e.g. 123">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Curriculum Subjects:</label>
+                                                <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1 border border-blue-100 p-2 rounded-xl bg-blue-50/30">
+                                                    ${subjectCheckboxesHtml}
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">Enroll Learner</button>
+                                        </form>
+                                    </div>
+                                    <div class="lg:col-span-2">
+                                        <h3 class="font-bold text-slate-800 mb-3 text-base">Enrolled Learners Registry (${learnersList.length})</h3>
+                                        <div class="space-y-4 max-h-[650px] overflow-y-auto pr-1">
+                                            ${learnersList.length > 0 ? learnersTableHtml : '<p class="text-sm text-slate-400 bg-slate-50 p-6 rounded-xl text-center border">No learners currently enrolled.</p>'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+        }
+
+        renderApp();
+    </script>
+</body>
+</html>
